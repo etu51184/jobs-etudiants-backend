@@ -26,9 +26,11 @@ app.get('/api/jobs', async (req, res) => {
     const result = await pool.query('SELECT * FROM jobs ORDER BY id DESC');
     res.json(result.rows);
   } catch (err) {
+    console.error('❌ ERREUR SQL :', err); // <-- Ajout du log
     res.status(500).json({ error: 'Erreur lors de la récupération des jobs' });
   }
 });
+
 
 // Get job by ID
 app.get('/api/jobs/:id', async (req, res) => {
