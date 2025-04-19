@@ -18,6 +18,19 @@ app.get('/api/jobs', (req, res) => {
   res.json(JSON.parse(data));
 });
 
+// Get job by ID
+app.get('/api/jobs/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!fs.existsSync(JOBS_FILE)) return res.status(404).json({ error: 'No jobs found' });
+  
+  const jobs = JSON.parse(fs.readFileSync(JOBS_FILE));
+  const job = jobs.find(j => j.id === id);
+
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+
+  res.json(job);
+});
+
 // Add a new job
 app.post('/api/jobs', (req, res) => {
   const newJob = req.body;
