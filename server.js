@@ -1,98 +1,86 @@
-const express = require('express');
-const cors = require('cors');
-const fs = require('fs');
-const bcrypt = require('bcryptjs');
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import pkg from 'pg';
+
+const { Pool } = pkg;
+dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const JOBS_FILE = './jobs.json';
-const USERS_FILE = './users.json';
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 app.use(cors());
 app.use(express.json());
 
+/** ROUTES **/
+
 // Get all jobs
-app.get('/api/jobs', (req, res) => {
-  if (!fs.existsSync(JOBS_FILE)) return res.json([]);
-  const data = fs.readFileSync(JOBS_FILE);
-  res.json(JSON.parse(data));
+app.get('/api/jobs', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM jobs ORDER BY id DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur lors de la récupération des jobs' });
+  }
 });
 
 // Get job by ID
-app.get('/api/jobs/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  if (!fs.existsSync(JOBS_FILE)) return res.status(404).json({ error: 'No jobs found' });
-  
-  const jobs = JSON.parse(fs.readFileSync(JOBS_FILE));
-  const job = jobs.find(j => j.id === id);
-
-  if (!job) return res.status(404).json({ error: 'Job not found' });
-
-  res.json(job);
+app.get('/api/jobs/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM jobs WHERE id = $1', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Annonce non trouvée' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur lors de la récupération du job' });
+  }
 });
 
-// Add a new job
-app.post('/api/jobs', (req, res) => {
-  const newJob = req.body;
-  if (!newJob.id) newJob.id = Date.now();
-  let jobs = fs.existsSync(JOBS_FILE) ? JSON.parse(fs.readFileSync(JOBS_FILE)) : [];
-  jobs.push(newJob);
-  fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
-  res.status(201).json(newJob);
+// Add a job
+app.post('/api/jobs', async (req, res) => {
+  const {
+    title, location, contractType, salary, contact, description,
+    days, schedule, duration, startDate, endDate, fullTime, expiresInDays
+  } = req.body;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO jobs (
+        title, location, contract_type, salary, contact, description,
+        days, schedule, duration, start_date, end_date, full_time, expires_in_days
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12, $13
+      ) RETURNING *`,
+      [title, location, contractType, salary, contact, description,
+        days, schedule, duration, startDate, endDate, fullTime, expiresInDays]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur lors de la création du job' });
+  }
 });
 
 // Delete a job
-app.delete('/api/jobs/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  let jobs = fs.existsSync(JOBS_FILE) ? JSON.parse(fs.readFileSync(JOBS_FILE)) : [];
-  const index = jobs.findIndex(j => j.id === id);
-  if (index === -1) return res.status(404).json({ error: 'Job not found' });
-  jobs.splice(index, 1);
-  fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
-  res.json({ message: 'Job deleted' });
-});
-
-// Create a user account
-app.post('/api/users', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Missing fields' });
-
-  let users = fs.existsSync(USERS_FILE) ? JSON.parse(fs.readFileSync(USERS_FILE)) : [];
-  if (users.find(u => u.username === username)) return res.status(409).json({ error: 'Username already taken' });
-
-  const hash = await bcrypt.hash(password, 10);
-  users.push({ username, password: hash });
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  res.status(201).json({ message: 'Account created' });
-});
-
-// Login
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  let users = fs.existsSync(USERS_FILE) ? JSON.parse(fs.readFileSync(USERS_FILE)) : [];
-  const user = users.find(u => u.username === username);
-  if (!user) return res.status(401).json({ error: 'User not found' });
-
-  const match = await bcrypt.compare(password, user.password);
-  if (!match) return res.status(403).json({ error: 'Incorrect password' });
-
-  const isAdmin = username === 'Florian';
-  res.json({ message: 'Logged in', isAdmin });
-});
-
-// Create default admin account on startup
-(async () => {
-  const adminUsername = "Florian";
-  const adminPassword = "M1n3Cr@ft";
-  let users = fs.existsSync(USERS_FILE) ? JSON.parse(fs.readFileSync(USERS_FILE)) : [];
-  if (!users.find(u => u.username === adminUsername)) {
-    const hash = await bcrypt.hash(adminPassword, 10);
-    users.push({ username: adminUsername, password: hash });
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-    console.log("✅ Admin account 'Florian' created");
+app.delete('/api/jobs/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM jobs WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Annonce introuvable' });
+    res.json({ message: 'Annonce supprimée' });
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur lors de la suppression' });
   }
-})();
+});
 
+/** START SERVER **/
 app.listen(PORT, () => {
-  console.log(`✅ Server running at http://localhost:${PORT}`);
+  console.log(`✅ Backend connecté à PostgreSQL — http://localhost:${PORT}`);
 });
