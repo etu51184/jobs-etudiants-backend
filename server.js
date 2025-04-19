@@ -15,17 +15,20 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// ✅ CORS Config pour Vercel + localhost
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://jobs-etudiants.vercel.app'
-];
-
+// ✅ CORS Config pour localhost + Vercel
 app.use(cors({
-  origin: allowedOrigins,
+  origin: ['http://localhost:5173', 'https://jobs-etudiants.vercel.app'],
   methods: ['GET', 'POST', 'DELETE'],
   credentials: true
 }));
+
+// ✅ Headers CORS manuels pour corriger Railway
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://jobs-etudiants.vercel.app");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  next();
+});
 
 app.use(express.json());
 
