@@ -15,7 +15,18 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-app.use(cors());
+// ✅ CORS Config pour Vercel + localhost
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://jobs-etudiants.vercel.app'
+];
+
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'DELETE'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 /** ROUTES **/
@@ -26,11 +37,10 @@ app.get('/api/jobs', async (req, res) => {
     const result = await pool.query('SELECT * FROM jobs ORDER BY id DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ ERREUR SQL :', err); // <-- Ajout du log
+    console.error('❌ ERREUR SQL :', err);
     res.status(500).json({ error: 'Erreur lors de la récupération des jobs' });
   }
 });
-
 
 // Get job by ID
 app.get('/api/jobs/:id', async (req, res) => {
@@ -48,20 +58,20 @@ app.get('/api/jobs/:id', async (req, res) => {
 app.post('/api/jobs', async (req, res) => {
   const {
     title, location, contractType, salary, contact, description,
-    days, schedule, duration, startDate, endDate, fullTime, expiresInDays
+    days, schedule, duration, startDate, endDate, fullTime, expiresInDays, createdBy
   } = req.body;
 
   try {
     const result = await pool.query(
       `INSERT INTO jobs (
         title, location, contract_type, salary, contact, description,
-        days, schedule, duration, start_date, end_date, full_time, expires_in_days
+        days, schedule, duration, start_date, end_date, full_time, expires_in_days, created_by
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12, $13
+        $7, $8, $9, $10, $11, $12, $13, $14
       ) RETURNING *`,
       [title, location, contractType, salary, contact, description,
-        days, schedule, duration, startDate, endDate, fullTime, expiresInDays]
+        days, schedule, duration, startDate, endDate, fullTime, expiresInDays, createdBy]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -73,10 +83,23 @@ app.post('/api/jobs', async (req, res) => {
 // Delete a job
 app.delete('/api/jobs/:id', async (req, res) => {
   const { id } = req.params;
+  const { username } = req.body;
+
+  if (!username) {
+    return res.status(401).json({ error: 'Non autorisé (utilisateur requis)' });
+  }
+
   try {
-    const result = await pool.query('DELETE FROM jobs WHERE id = $1 RETURNING *', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Annonce introuvable' });
-    res.json({ message: 'Annonce supprimée' });
+    const result = await pool.query('SELECT * FROM jobs WHERE id = $1', [id]);
+    const job = result.rows[0];
+    if (!job) return res.status(404).json({ error: 'Annonce introuvable' });
+
+    if (job.created_by !== username && username !== 'Florian') {
+      return res.status(403).json({ error: 'Vous ne pouvez pas supprimer cette annonce' });
+    }
+
+    await pool.query('DELETE FROM jobs WHERE id = $1', [id]);
+    res.json({ message: 'Annonce supprimée avec succès' });
   } catch (err) {
     res.status(500).json({ error: 'Erreur lors de la suppression' });
   }
