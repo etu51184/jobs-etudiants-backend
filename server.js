@@ -5,81 +5,81 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const DB_FILE = './annonces.json';
+const JOBS_FILE = './jobs.json';
 const USERS_FILE = './users.json';
 
 app.use(cors());
 app.use(express.json());
 
-// Récupérer les annonces
-app.get('/annonces', (req, res) => {
-  if (!fs.existsSync(DB_FILE)) return res.json([]);
-  const data = fs.readFileSync(DB_FILE);
+// Get all jobs
+app.get('/api/jobs', (req, res) => {
+  if (!fs.existsSync(JOBS_FILE)) return res.json([]);
+  const data = fs.readFileSync(JOBS_FILE);
   res.json(JSON.parse(data));
 });
 
-// Ajouter une annonce
-app.post('/annonces', (req, res) => {
-  const nouvelleAnnonce = req.body;
-  if (!nouvelleAnnonce.id) nouvelleAnnonce.id = Date.now();
-  let annonces = fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : [];
-  annonces.push(nouvelleAnnonce);
-  fs.writeFileSync(DB_FILE, JSON.stringify(annonces, null, 2));
-  res.status(201).json({ message: 'Annonce ajoutée' });
+// Add a new job
+app.post('/api/jobs', (req, res) => {
+  const newJob = req.body;
+  if (!newJob.id) newJob.id = Date.now();
+  let jobs = fs.existsSync(JOBS_FILE) ? JSON.parse(fs.readFileSync(JOBS_FILE)) : [];
+  jobs.push(newJob);
+  fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
+  res.status(201).json(newJob);
 });
 
-// Supprimer une annonce
-app.delete('/annonces/:id', (req, res) => {
+// Delete a job
+app.delete('/api/jobs/:id', (req, res) => {
   const id = parseInt(req.params.id);
-  let annonces = fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : [];
-  const index = annonces.findIndex(a => a.id === id);
-  if (index === -1) return res.status(404).json({ error: 'Annonce non trouvée' });
-  annonces.splice(index, 1);
-  fs.writeFileSync(DB_FILE, JSON.stringify(annonces, null, 2));
-  res.json({ message: 'Annonce supprimée' });
+  let jobs = fs.existsSync(JOBS_FILE) ? JSON.parse(fs.readFileSync(JOBS_FILE)) : [];
+  const index = jobs.findIndex(j => j.id === id);
+  if (index === -1) return res.status(404).json({ error: 'Job not found' });
+  jobs.splice(index, 1);
+  fs.writeFileSync(JOBS_FILE, JSON.stringify(jobs, null, 2));
+  res.json({ message: 'Job deleted' });
 });
 
-// Créer un compte utilisateur
-app.post('/users', async (req, res) => {
+// Create a user account
+app.post('/api/users', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Champs manquants' });
+  if (!username || !password) return res.status(400).json({ error: 'Missing fields' });
 
   let users = fs.existsSync(USERS_FILE) ? JSON.parse(fs.readFileSync(USERS_FILE)) : [];
-  if (users.find(u => u.username === username)) return res.status(409).json({ error: 'Nom déjà pris' });
+  if (users.find(u => u.username === username)) return res.status(409).json({ error: 'Username already taken' });
 
   const hash = await bcrypt.hash(password, 10);
   users.push({ username, password: hash });
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  res.status(201).json({ message: 'Compte créé' });
+  res.status(201).json({ message: 'Account created' });
 });
 
-// Connexion
-app.post('/login', async (req, res) => {
+// Login
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   let users = fs.existsSync(USERS_FILE) ? JSON.parse(fs.readFileSync(USERS_FILE)) : [];
   const user = users.find(u => u.username === username);
-  if (!user) return res.status(401).json({ error: 'Utilisateur inconnu' });
+  if (!user) return res.status(401).json({ error: 'User not found' });
 
   const match = await bcrypt.compare(password, user.password);
-  if (!match) return res.status(403).json({ error: 'Mot de passe incorrect' });
+  if (!match) return res.status(403).json({ error: 'Incorrect password' });
 
   const isAdmin = username === 'Florian';
-  res.json({ message: 'Connecté', isAdmin });
+  res.json({ message: 'Logged in', isAdmin });
 });
 
-// Créer compte admin au démarrage
+// Create default admin account on startup
 (async () => {
-  const adminNom = "Florian";
-  const adminPass = "M1n3Cr@ft";
+  const adminUsername = "Florian";
+  const adminPassword = "M1n3Cr@ft";
   let users = fs.existsSync(USERS_FILE) ? JSON.parse(fs.readFileSync(USERS_FILE)) : [];
-  if (!users.find(u => u.username === adminNom)) {
-    const hash = await bcrypt.hash(adminPass, 10);
-    users.push({ username: adminNom, password: hash });
+  if (!users.find(u => u.username === adminUsername)) {
+    const hash = await bcrypt.hash(adminPassword, 10);
+    users.push({ username: adminUsername, password: hash });
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-    console.log("✅ Compte admin Florian créé");
+    console.log("✅ Admin account 'Florian' created");
   }
 })();
 
 app.listen(PORT, () => {
-  console.log(`✅ Serveur démarré sur http://localhost:${PORT}`);
+  console.log(`✅ Server running at http://localhost:${PORT}`);
 });
