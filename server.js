@@ -12,7 +12,8 @@ const allowedOrigins = [
   'https://jobs-etudiants.vercel.app',
   'https://www.jobs-etudiants.vercel.app',
   'http://localhost:5173',
-  'http://127.0.0.1:5173'
+  'http://127.0.0.1:5173',
+  'https://jobs-etudiants-frontend-rlzm8ku8w-florians-projects-878b84e6.vercel.app'
 ];
 
 // Middleware CORS personnalisé
