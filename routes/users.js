@@ -53,8 +53,8 @@ router.post("/login", async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ message: "Mot de passe incorrect" });
 
-    const token = jwt.sign({ id: user.id, role: user.role || "user" }, secret, { expiresIn: "24h" });
-    res.json({ token, email: user.email });
+    const token = jwt.sign({ id: user.id, role: user.role }, secret, { expiresIn: "24h" });
+    res.json({ token, email: user.email, role: user.role });
   } catch (err) {
     console.error("Erreur login :", err);
     res.status(500).json({ message: "Erreur serveur" });
