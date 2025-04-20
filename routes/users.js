@@ -24,17 +24,21 @@ const authenticate = (req, res, next) => {
 
 // 📥 Enregistrer un nouvel utilisateur
 router.post("/register", async (req, res) => {
-  const { username, email, password } = req.body;
+  const { email, password } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      "INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *",
-      [username, email, hashedPassword]
+      "INSERT INTO users (email, password) VALUES ($1, $2) RETURNING *",
+      [email, hashedPassword]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("Erreur enregistrement utilisateur :", err);
-    res.status(500).json({ message: "Erreur serveur" });
+    if (err.code === '23505') {
+      res.status(400).json({ message: "Adresse email déjà utilisée." });
+    } else {
+      res.status(500).json({ message: "Erreur serveur" });
+    }
   }
 });
 
@@ -49,8 +53,8 @@ router.post("/login", async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ message: "Mot de passe incorrect" });
 
-    const token = jwt.sign({ id: user.id, username: user.username }, secret, { expiresIn: "24h" });
-    res.json({ token, username: user.username });
+    const token = jwt.sign({ id: user.id, role: user.role || "user" }, secret, { expiresIn: "24h" });
+    res.json({ token, email: user.email });
   } catch (err) {
     console.error("Erreur login :", err);
     res.status(500).json({ message: "Erreur serveur" });
@@ -59,9 +63,9 @@ router.post("/login", async (req, res) => {
 
 // 📋 Lister les utilisateurs (admin uniquement)
 router.get("/", authenticate, async (req, res) => {
-  if (req.user.username !== "admin") return res.status(403).json({ message: "Accès refusé" });
+  if (req.user.role !== "admin") return res.status(403).json({ message: "Accès refusé" });
   try {
-    const result = await pool.query("SELECT id, username, email FROM users");
+    const result = await pool.query("SELECT id, email FROM users");
     res.json(result.rows);
   } catch (err) {
     console.error("Erreur récupération utilisateurs :", err);
@@ -71,7 +75,7 @@ router.get("/", authenticate, async (req, res) => {
 
 // 🗑 Supprimer un utilisateur (admin uniquement)
 router.delete("/:id", authenticate, async (req, res) => {
-  if (req.user.username !== "admin") return res.status(403).json({ message: "Accès refusé" });
+  if (req.user.role !== "admin") return res.status(403).json({ message: "Accès refusé" });
   try {
     const { id } = req.params;
     await pool.query("DELETE FROM users WHERE id = $1", [id]);
