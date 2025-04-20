@@ -27,7 +27,7 @@ router.post('/', async (req, res) => {
   const {
     title,
     description,
-    contract_type,
+    contractType, // Récupéré tel quel depuis le frontend
     location,
     schedule,
     days,
@@ -41,7 +41,7 @@ router.post('/', async (req, res) => {
     const result = await pool.query(
       `INSERT INTO jobs (title, description, contract_type, location, schedule, days, contact, posted_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [title, description, contract_type, location, schedule, days, contact, posted_by]
+      [title, description, contractType, location, schedule, days, contact, posted_by]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
