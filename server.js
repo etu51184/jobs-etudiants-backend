@@ -7,22 +7,23 @@ import jobRoutes from './routes/jobs.js';
 dotenv.config();
 const app = express();
 
-// Liste des origines autorisées
-const allowedOrigins = [
-  'https://jobs-etudiants.vercel.app',
-  'https://www.jobs-etudiants.vercel.app',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'https://jobs-etudiants-frontend-rlzm8ku8w-florians-projects-878b84e6.vercel.app'
-];
-
-// Middleware CORS personnalisé
+// Middleware CORS dynamique : autorise les appels depuis .vercel.app et localhost
 app.use(cors({
   origin: (origin, callback) => {
-    // autoriser les requêtes sans origin (Postman, curl)
+    // autorise les requêtes sans origin (Postman, curl)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+    try {
+      const { hostname } = new URL(origin);
+      // Autoriser les domaines en .vercel.app ou localhost:5173
+      if (
+        hostname.endsWith('.vercel.app') ||
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1'
+      ) {
+        return callback(null, true);
+      }
+    } catch (e) {
+      // Si URL invalide, rejette
     }
     callback(new Error(`Origin ${origin} non autorisée par CORS`));
   }
