@@ -15,33 +15,29 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// ✅ CORS complet : whitelist + préflight + headers manuels
-const allowedOrigins = ['http://localhost:5173', 'https://jobs-etudiants.vercel.app'];
+// ✅ CORS Configuration
+const allowedOrigins = ['https://jobs-etudiants.vercel.app', 'http://localhost:5173'];
 
-app.use(cors({
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'DELETE'],
-  credentials: true
-}));
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200
+};
 
-app.options('*', cors({
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'DELETE'],
-  credentials: true
-}));
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Preflight
 
-app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "https://jobs-etudiants.vercel.app");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-  next();
-});
-
+// Middleware
 app.use(express.json());
 
-/** ROUTES **/
+// ROUTES
 
-// Get all jobs
 app.get('/api/jobs', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM jobs ORDER BY id DESC');
@@ -52,7 +48,6 @@ app.get('/api/jobs', async (req, res) => {
   }
 });
 
-// Get job by ID
 app.get('/api/jobs/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -64,7 +59,6 @@ app.get('/api/jobs/:id', async (req, res) => {
   }
 });
 
-// Add a job
 app.post('/api/jobs', async (req, res) => {
   const {
     title, location, contractType, salary, contact, description,
@@ -90,7 +84,6 @@ app.post('/api/jobs', async (req, res) => {
   }
 });
 
-// Delete a job
 app.delete('/api/jobs/:id', async (req, res) => {
   const { id } = req.params;
   const { username } = req.body;
@@ -115,7 +108,6 @@ app.delete('/api/jobs/:id', async (req, res) => {
   }
 });
 
-/** START SERVER **/
 app.listen(PORT, () => {
   console.log(`✅ Backend connecté à PostgreSQL — http://localhost:${PORT}`);
 });
