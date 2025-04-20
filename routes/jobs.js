@@ -35,6 +35,8 @@ router.post('/', async (req, res) => {
     posted_by
   } = req.body;
 
+  console.log('🔍 Données reçues :', req.body);
+
   try {
     const result = await pool.query(
       `INSERT INTO jobs (title, description, contract_type, location, schedule, days, contact, posted_by)
