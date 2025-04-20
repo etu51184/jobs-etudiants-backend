@@ -15,7 +15,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// ✅ CORS complet : middleware + preflight + headers manuels
+// ✅ CORS complet : whitelist + préflight + headers manuels
 const allowedOrigins = ['http://localhost:5173', 'https://jobs-etudiants.vercel.app'];
 
 app.use(cors({
