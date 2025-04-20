@@ -25,6 +25,9 @@ app.use(cors({
 
 // Middleware JSON
 app.use(express.json());
+import userRoutes from './routes/users.js';
+app.use('/api/users', userRoutes);
+
 
 // Exemple de route (à adapter selon tes routes réelles)
 app.get('/api/jobs', async (req, res) => {
