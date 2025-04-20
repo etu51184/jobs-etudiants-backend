@@ -22,12 +22,27 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET a single job by ID
+router.get('/:id', async (req, res) => {
+  const jobId = req.params.id;
+  try {
+    const result = await pool.query('SELECT * FROM jobs WHERE id = $1', [jobId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Annonce introuvable' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ ERREUR SQL :', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // POST a new job
 router.post('/', async (req, res) => {
   const {
     title,
     description,
-    contractType, // Récupéré tel quel depuis le frontend
+    contractType,
     location,
     schedule,
     days,
