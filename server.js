@@ -15,10 +15,10 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// ✅ CORS Configuration
+// ✅ CORS sécurisé pour Vercel + localhost
 const allowedOrigins = ['https://jobs-etudiants.vercel.app', 'http://localhost:5173'];
 
-const corsOptions = {
+app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -27,17 +27,18 @@ const corsOptions = {
     }
   },
   credentials: true,
-  optionsSuccessStatus: 200
-};
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Preflight
+app.options('*', cors());
 
 // Middleware
 app.use(express.json());
 
-// ROUTES
+// ==================== ROUTES ====================
 
+// GET all jobs
 app.get('/api/jobs', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM jobs ORDER BY id DESC');
@@ -48,6 +49,7 @@ app.get('/api/jobs', async (req, res) => {
   }
 });
 
+// GET job by ID
 app.get('/api/jobs/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -59,6 +61,7 @@ app.get('/api/jobs/:id', async (req, res) => {
   }
 });
 
+// POST new job
 app.post('/api/jobs', async (req, res) => {
   const {
     title, location, contractType, salary, contact, description,
@@ -84,6 +87,7 @@ app.post('/api/jobs', async (req, res) => {
   }
 });
 
+// DELETE job
 app.delete('/api/jobs/:id', async (req, res) => {
   const { id } = req.params;
   const { username } = req.body;
@@ -108,6 +112,7 @@ app.delete('/api/jobs/:id', async (req, res) => {
   }
 });
 
+// ==================== START ====================
 app.listen(PORT, () => {
   console.log(`✅ Backend connecté à PostgreSQL — http://localhost:${PORT}`);
 });
