@@ -1,15 +1,31 @@
+// routes/jobs.js
 import express from 'express';
 import pool from '../db.js';
 
 const router = express.Router();
 
-// GET all jobs
+// GET all jobs with pagination
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM jobs ORDER BY id DESC');
-    res.json(result.rows);
+    let { page = 1, limit = 10 } = req.query;
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
+    const offset = (page - 1) * limit;
+
+    // Count total jobs
+    const countRes = await pool.query('SELECT COUNT(*) AS total FROM jobs');
+    const total = parseInt(countRes.rows[0].total, 10);
+    const pages = Math.ceil(total / limit);
+
+    // Fetch paginated jobs
+    const dataRes = await pool.query(
+      'SELECT * FROM jobs ORDER BY id DESC LIMIT $1 OFFSET $2',
+      [limit, offset]
+    );
+
+    res.json({ jobs: dataRes.rows, page, pages, total });
   } catch (error) {
-    console.error('Erreur SQL GET jobs :', error);
+    console.error('Erreur SQL GET jobs paginated :', error);
     res.status(500).json({ error: 'Erreur lors du chargement des annonces' });
   }
 });
@@ -19,9 +35,7 @@ router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query('SELECT * FROM jobs WHERE id = $1', [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Annonce non trouvée' });
-    }
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Annonce non trouvée' });
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Erreur SQL GET job by ID :', error);
@@ -48,35 +62,21 @@ router.post('/', async (req, res) => {
     salary
   } = req.body;
 
-  // support both camelCase and snake_case
+  // Support both camelCase and snake_case
   const contractTypeValue = contractType || contract_type;
-
-  if (!contractTypeValue) {
-    return res.status(400).json({ error: 'Le type de contrat est requis' });
-  }
+  if (!contractTypeValue) return res.status(400).json({ error: 'Le type de contrat est requis' });
 
   try {
     const result = await pool.query(
       `INSERT INTO jobs
-        (title, description, contract_type, location, schedule, days, contact,
-         created_by, full_time, duration, start_date, end_date, salary)
-       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         (title, description, contract_type, location, schedule, days, contact,
+          created_by, full_time, duration, start_date, end_date, salary)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
       [
-        title,
-        description,
-        contractTypeValue,
-        location,
-        schedule,
-        days,
-        contact,
-        createdBy,
-        fullTime,
-        duration,
-        startDate,
-        endDate,
-        salary
+        title, description, contractTypeValue, location,
+        schedule, days, contact, createdBy,
+        fullTime, duration, startDate, endDate, salary
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -90,14 +90,15 @@ router.post('/', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('DELETE FROM jobs WHERE id = $1 RETURNING *', [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Annonce non trouvée pour suppression' });
-    }
+    const result = await pool.query(
+      'DELETE FROM jobs WHERE id = $1 RETURNING *',
+      [id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Annonce non trouvée pour suppression' });
     res.json({ success: true, deleted: result.rows[0] });
   } catch (error) {
     console.error('Erreur SQL DELETE job :', error);
-    res.status(500).json({ error: 'Erreur lors de la suppression de l\'annonce' });
+    res.status(500).json({ error: "Erreur lors de la suppression de l'annonce" });
   }
 });
 
