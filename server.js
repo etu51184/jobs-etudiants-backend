@@ -1,14 +1,13 @@
-// server.js
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import userRoutes from './routes/users.js';
-import jobRoutes from './routes/jobs.js';
+import userRoutes from './users.js';
+import jobRoutes from './jobs.js';
 
 dotenv.config();
 const app = express();
 
-// CORS : autorise les appels depuis Vercel, localhost et Postman/curl
+// CORS dynamic: allow Vercel, localhost, Postman/curl
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
@@ -22,18 +21,18 @@ app.use(cors({
         return callback(null, true);
       }
     } catch {
-      // URL invalide
+      // invalid URL
     }
-    callback(new Error(`Origin ${origin} non autorisée par CORS`));
+    callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization']
 }));
 
-// Parse JSON bodies
+// JSON parser
 app.use(express.json());
 
-// Monte les routers
+// Mount route handlers (files users.js and jobs.js at project root)
 app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
 
@@ -42,14 +41,12 @@ app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// Error handler
+// Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ message: 'Server error' });
 });
 
-// Démarrage du serveur
+// Start server
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`✅ Backend démarré sur le port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
