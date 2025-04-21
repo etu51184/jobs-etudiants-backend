@@ -4,28 +4,52 @@ import pool from '../db.js';
 
 const router = express.Router();
 
-// GET all jobs with pagination
+// GET all jobs with pagination, search and filters
 router.get('/', async (req, res) => {
   try {
-    let { page = 1, limit = 10 } = req.query;
+    let { page = 1, limit = 10, search = '', type = 'all', location = '' } = req.query;
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
     const offset = (page - 1) * limit;
 
-    // Count total jobs
-    const countRes = await pool.query('SELECT COUNT(*) AS total FROM jobs');
+    // Build dynamic WHERE clauses
+    const clauses = [];
+    const params = [];
+
+    if (search) {
+      params.push(`%${search.toLowerCase()}%`);
+      clauses.push(`(LOWER(title) LIKE $${params.length} OR LOWER(description) LIKE $${params.length})`);
+    }
+    if (type !== 'all') {
+      params.push(type);
+      clauses.push(`contract_type = $${params.length}`);
+    }
+    if (location) {
+      params.push(`%${location.toLowerCase()}%`);
+      clauses.push(`LOWER(location) LIKE $${params.length}`);
+    }
+
+    const whereClause = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
+
+    // Count total with filters
+    const countSql = `SELECT COUNT(*) AS total FROM jobs ${whereClause}`;
+    const countRes = await pool.query(countSql, params);
     const total = parseInt(countRes.rows[0].total, 10);
     const pages = Math.ceil(total / limit);
 
-    // Fetch paginated jobs
-    const dataRes = await pool.query(
-      'SELECT * FROM jobs ORDER BY id DESC LIMIT $1 OFFSET $2',
-      [limit, offset]
-    );
+    // Fetch paginated data with filters
+    params.push(limit, offset);
+    const dataSql = `
+      SELECT * FROM jobs
+      ${whereClause}
+      ORDER BY id DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+    const dataRes = await pool.query(dataSql, params);
 
     res.json({ jobs: dataRes.rows, page, pages, total });
   } catch (error) {
-    console.error('Erreur SQL GET jobs paginated :', error);
+    console.error('Erreur SQL GET jobs paginated+search :', error);
     res.status(500).json({ error: 'Erreur lors du chargement des annonces' });
   }
 });
@@ -62,7 +86,7 @@ router.post('/', async (req, res) => {
     salary
   } = req.body;
 
-  // Support both camelCase and snake_case
+  // Support both camelCase and snake_case for contract type
   const contractTypeValue = contractType || contract_type;
   if (!contractTypeValue) return res.status(400).json({ error: 'Le type de contrat est requis' });
 
@@ -71,12 +95,23 @@ router.post('/', async (req, res) => {
       `INSERT INTO jobs
          (title, description, contract_type, location, schedule, days, contact,
           created_by, full_time, duration, start_date, end_date, salary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       VALUES
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
       [
-        title, description, contractTypeValue, location,
-        schedule, days, contact, createdBy,
-        fullTime, duration, startDate, endDate, salary
+        title,
+        description,
+        contractTypeValue,
+        location,
+        schedule,
+        days,
+        contact,
+        createdBy,
+        fullTime,
+        duration,
+        startDate,
+        endDate,
+        salary
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -90,15 +125,12 @@ router.post('/', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query(
-      'DELETE FROM jobs WHERE id = $1 RETURNING *',
-      [id]
-    );
+    const result = await pool.query('DELETE FROM jobs WHERE id = $1 RETURNING *', [id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Annonce non trouvée pour suppression' });
     res.json({ success: true, deleted: result.rows[0] });
   } catch (error) {
     console.error('Erreur SQL DELETE job :', error);
-    res.status(500).json({ error: "Erreur lors de la suppression de l'annonce" });
+    res.status(500).json({ error: 'Erreur lors de la suppression de l\'annonce' });
   }
 });
 
