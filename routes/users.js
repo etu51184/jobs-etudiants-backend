@@ -92,4 +92,18 @@ router.delete("/:id", authenticate, async (req, res) => {
   }
 });
 
+router.get("/me/jobs", authenticate, async (req, res) => {
+  try {
+    // on filtre par l'ID de l'utilisateur (depuis le JWT)
+    const result = await pool.query(
+      "SELECT * FROM jobs WHERE created_by = $1 ORDER BY id DESC",
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erreur récupération mes annonces :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+});
+
 export default router;
