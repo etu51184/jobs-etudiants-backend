@@ -1,17 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import userRoutes from './users.js';
-import jobRoutes from './jobs.js';
+import userRoutes from './routes/users.js';
+import jobRoutes from './routes/jobs.js';
 
-// Charge les variables d'environnement
 dotenv.config();
 const app = express();
 
-// Middleware CORS dynamique : autorise les requêtes depuis Vercel ou localhost
+// CORS middleware: allow Vercel and localhost origins
 app.use(cors({
   origin: (origin, callback) => {
-    // Autoriser les requêtes sans origin (Postman, curl)
     if (!origin) return callback(null, true);
     try {
       const { hostname } = new URL(origin);
@@ -22,35 +20,35 @@ app.use(cors({
       ) {
         return callback(null, true);
       }
-    } catch (e) {
-      // Si URL invalide, rejette
+    } catch {
+      // invalid URL
     }
-    callback(new Error(`Origin ${origin} non autorisée par CORS`));
+    callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Parser le JSON des requêtes
+// JSON parser
 app.use(express.json());
 
-// Routes de l'application
+// Route handlers
 app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
 
-// Gestionnaire de route non trouvée
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// Gestionnaire d'erreurs
+// Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ message: 'Server error' });
 });
 
-// Démarrage du serveur
+// Start server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`✅ Backend démarré sur le port ${PORT}`);
+  console.log(`✅ Backend running on port ${PORT}`);
 });
