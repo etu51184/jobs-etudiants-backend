@@ -20,11 +20,69 @@ const authenticate = (req, res, next) => {
   });
 };
 
-// GET toutes les annonces: GET /api/jobs
+/**
+ * GET /api/jobs
+ * - pagination via ?page=&limit=
+ * - recherche sur le titre via ?search=
+ * - filtre type via ?type=
+ * - filtre lieu via ?location=
+ * Retourne { jobs: [...], pages: N }
+ */
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM jobs ORDER BY id DESC');
-    res.json(result.rows);
+    // 1. Lire page & limit
+    const page  = Math.max(1, parseInt(req.query.page, 10)  || 1);
+    const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
+    const offset = (page - 1) * limit;
+
+    // 2. Construire les filtres dynamiques
+    const filters = [];
+    const values = [];
+    let idx = 1;
+
+    if (req.query.search) {
+      filters.push(`title ILIKE $${idx}`);
+      values.push(`%${req.query.search}%`);
+      idx++;
+    }
+    if (req.query.type && req.query.type !== 'all') {
+      filters.push(`contract_type = $${idx}`);
+      values.push(req.query.type);
+      idx++;
+    }
+    if (req.query.location) {
+      filters.push(`location ILIKE $${idx}`);
+      values.push(`%${req.query.location}%`);
+      idx++;
+    }
+
+    const whereClause = filters.length
+      ? 'WHERE ' + filters.join(' AND ')
+      : '';
+
+    // 3. Compter le total pour calculer le nombre de pages
+    const countQuery = `SELECT COUNT(*) FROM jobs ${whereClause};`;
+    const countRes = await pool.query(countQuery, values);
+    const totalCount = parseInt(countRes.rows[0].count, 10);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // 4. Récupérer la page demandée
+    const dataQuery = `
+      SELECT *
+      FROM jobs
+      ${whereClause}
+      ORDER BY id DESC
+      LIMIT $${idx} OFFSET $${idx + 1};
+    `;
+    values.push(limit, offset);
+    const dataRes = await pool.query(dataQuery, values);
+
+    // 5. Envoyer le résultat paginé
+    res.json({
+      jobs: dataRes.rows,
+      pages: totalPages
+    });
+
   } catch (err) {
     console.error('Erreur SQL GET jobs :', err);
     res.status(500).json({ error: 'Erreur lors du chargement des annonces' });
