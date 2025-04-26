@@ -15,7 +15,7 @@ const authenticate = (req, res, next) => {
   const token = authHeader.split(' ')[1];
   jwt.verify(token, secret, (err, payload) => {
     if (err) return res.status(403).json({ message: 'Token invalide' });
-    req.user = payload; // { id, role }
+    req.user = payload; // { id, role, ... }
     next();
   });
 };
@@ -61,21 +61,25 @@ router.get('/', async (req, res) => {
       : '';
 
     // 3. Compter le total pour calculer le nombre de pages
-    const countQuery = `SELECT COUNT(*) FROM jobs ${whereClause};`;
-    const countRes = await pool.query(countQuery, values);
+    const countRes = await pool.query(
+      `SELECT COUNT(*) FROM jobs ${whereClause};`,
+      values
+    );
     const totalCount = parseInt(countRes.rows[0].count, 10);
     const totalPages = Math.ceil(totalCount / limit);
 
     // 4. Récupérer la page demandée
-    const dataQuery = `
+    values.push(limit, offset);
+    const dataRes = await pool.query(
+      `
       SELECT *
       FROM jobs
       ${whereClause}
       ORDER BY id DESC
       LIMIT $${idx} OFFSET $${idx + 1};
-    `;
-    values.push(limit, offset);
-    const dataRes = await pool.query(dataQuery, values);
+      `,
+      values
+    );
 
     // 5. Envoyer le résultat paginé
     res.json({
@@ -86,6 +90,24 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('Erreur SQL GET jobs :', err);
     res.status(500).json({ error: 'Erreur lors du chargement des annonces' });
+  }
+});
+
+/**
+ * GET /api/jobs/me
+ * Retourne les annonces créées par l'utilisateur authentifié
+ */
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const result = await pool.query(
+      'SELECT * FROM jobs WHERE created_by = $1 ORDER BY id DESC',
+      [userId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erreur SQL GET my jobs :', err);
+    res.status(500).json({ error: 'Erreur lors du chargement de vos annonces' });
   }
 });
 
