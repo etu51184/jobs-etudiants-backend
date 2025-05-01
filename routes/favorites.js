@@ -1,7 +1,7 @@
 // src/routes/favorites.js
 
 import express from 'express';
-import pool from '../db.js';       // default export from db.js :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
+import pool from '../db.js';       // default export from db.js
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 
@@ -10,9 +10,7 @@ const router = express.Router();
 
 /**
  * Decode et vérifie le JWT dans l'en-tête Authorization.
- * @param {object} req - Requête Express
- * @param {object} res - Réponse Express
- * @returns {object|null} payload JWT ou null + réponse 401
+ * @returns Payload utilisateur ({ id, email, role }) ou null + envoie 401.
  */
 function authenticate(req, res) {
   const authHeader = req.headers.authorization;
@@ -23,14 +21,14 @@ function authenticate(req, res) {
   const token = authHeader.split(' ')[1];
   try {
     return jwt.verify(token, process.env.JWT_SECRET);
-  } catch (err) {
+  } catch {
     res.status(401).json({ error: 'Invalid token' });
     return null;
   }
 }
 
 // GET /api/favorites
-// Retourne la liste des favoris pour l'utilisateur authentifié
+// Liste tous les favoris de l'utilisateur
 router.get('/', async (req, res) => {
   const user = authenticate(req, res);
   if (!user) return;
@@ -48,8 +46,7 @@ router.get('/', async (req, res) => {
        ORDER BY f.created_at DESC`,
       [user.id]
     );
-
-    // Ajoute isFavorite pour compatibilité frontend
+    // Ajoute un flag isFavorite pour chaque entrée
     res.json(rows.map(r => ({ ...r, isFavorite: true })));
   } catch (err) {
     console.error('Error loading favorites:', err);
@@ -57,8 +54,27 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/favorites/:jobId
+// Indique si le job est en favori pour l'utilisateur
+router.get('/:jobId', async (req, res) => {
+  const user = authenticate(req, res);
+  if (!user) return;
+
+  const jobId = req.params.jobId;
+  try {
+    const { rowCount } = await pool.query(
+      `SELECT 1 FROM favorites WHERE user_id = $1 AND job_id = $2`,
+      [user.id, jobId]
+    );
+    res.json({ isFavorite: rowCount > 0 });
+  } catch (err) {
+    console.error('Error checking favorite:', err);
+    res.status(500).json({ error: 'Failed to check favorite' });
+  }
+});
+
 // POST /api/favorites/:jobId
-// Ajoute l'annonce aux favoris de l'utilisateur
+// Ajoute un job aux favoris
 router.post('/:jobId', async (req, res) => {
   const user = authenticate(req, res);
   if (!user) return;
@@ -78,15 +94,14 @@ router.post('/:jobId', async (req, res) => {
 });
 
 // DELETE /api/favorites/:jobId
-// Supprime l'annonce des favoris de l'utilisateur
+// Retire un job des favoris
 router.delete('/:jobId', async (req, res) => {
   const user = authenticate(req, res);
   if (!user) return;
 
   try {
     await pool.query(
-      `DELETE FROM favorites
-       WHERE user_id = $1 AND job_id = $2`,
+      `DELETE FROM favorites WHERE user_id = $1 AND job_id = $2`,
       [user.id, req.params.jobId]
     );
     res.json({ message: 'Removed from favorites' });
