@@ -8,6 +8,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 const router = express.Router();
 
+// Utilise le même secret que pour users.js et jobs.js
+const secret = process.env.JWT_SECRET || 'default_secret';
+
 /**
  * Decode et vérifie le JWT dans l'en-tête Authorization.
  * @returns Payload utilisateur ({ id, email, role }) ou null + envoie 401.
@@ -20,7 +23,7 @@ function authenticate(req, res) {
   }
   const token = authHeader.split(' ')[1];
   try {
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return jwt.verify(token, secret);
   } catch {
     res.status(401).json({ error: 'Invalid token' });
     return null;
@@ -79,12 +82,13 @@ router.post('/:jobId', async (req, res) => {
   const user = authenticate(req, res);
   if (!user) return;
 
+  const jobId = req.params.jobId;
   try {
     await pool.query(
       `INSERT INTO favorites(user_id, job_id)
        VALUES ($1, $2)
        ON CONFLICT DO NOTHING`,
-      [user.id, req.params.jobId]
+      [user.id, jobId]
     );
     res.status(201).json({ message: 'Added to favorites' });
   } catch (err) {
@@ -99,10 +103,11 @@ router.delete('/:jobId', async (req, res) => {
   const user = authenticate(req, res);
   if (!user) return;
 
+  const jobId = req.params.jobId;
   try {
     await pool.query(
       `DELETE FROM favorites WHERE user_id = $1 AND job_id = $2`,
-      [user.id, req.params.jobId]
+      [user.id, jobId]
     );
     res.json({ message: 'Removed from favorites' });
   } catch (err) {

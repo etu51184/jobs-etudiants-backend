@@ -30,12 +30,10 @@ const authenticate = (req, res, next) => {
  */
 router.get('/', async (req, res) => {
   try {
-    // 1. Lire page & limit
-    const page  = Math.max(1, parseInt(req.query.page, 10)  || 1);
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
     const offset = (page - 1) * limit;
 
-    // 2. Construire les filtres dynamiques
     const filters = [];
     const values = [];
     let idx = 1;
@@ -56,11 +54,8 @@ router.get('/', async (req, res) => {
       idx++;
     }
 
-    const whereClause = filters.length
-      ? 'WHERE ' + filters.join(' AND ')
-      : '';
+    const whereClause = filters.length ? 'WHERE ' + filters.join(' AND ') : '';
 
-    // 3. Compter le total pour calculer le nombre de pages
     const countRes = await pool.query(
       `SELECT COUNT(*) FROM jobs ${whereClause};`,
       values
@@ -68,25 +63,17 @@ router.get('/', async (req, res) => {
     const totalCount = parseInt(countRes.rows[0].count, 10);
     const totalPages = Math.ceil(totalCount / limit);
 
-    // 4. Récupérer la page demandée
     values.push(limit, offset);
     const dataRes = await pool.query(
-      `
-      SELECT *
-      FROM jobs
-      ${whereClause}
-      ORDER BY id DESC
-      LIMIT $${idx} OFFSET $${idx + 1};
-      `,
+      `SELECT *
+       FROM jobs
+       ${whereClause}
+       ORDER BY id DESC
+       LIMIT $${idx} OFFSET $${idx + 1};`,
       values
     );
 
-    // 5. Envoyer le résultat paginé
-    res.json({
-      jobs: dataRes.rows,
-      pages: totalPages
-    });
-
+    res.json({ jobs: dataRes.rows, pages: totalPages });
   } catch (err) {
     console.error('Erreur SQL GET jobs :', err);
     res.status(500).json({ error: 'Erreur lors du chargement des annonces' });
@@ -111,7 +98,10 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
-// GET une annonce par ID: GET /api/jobs/:id
+/**
+ * GET /api/jobs/:id
+ * Retourne une annonce par ID
+ */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -125,30 +115,57 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Créer une annonce (auth req): POST /api/jobs
+/**
+ * POST /api/jobs
+ * Créer une annonce (auth requise)
+ * Accepte des champs personnalisés en JSONB
+ */
 router.post('/', authenticate, async (req, res) => {
   const {
-    title, description,
-    contractType, contract_type,
-    location, schedule, days,
-    contact, fullTime, duration,
-    startDate, endDate, salary
+    title,
+    description,
+    contractType,
+    contract_type,
+    location,
+    schedule,
+    days,
+    contact,
+    fullTime,
+    duration,
+    startDate,
+    endDate,
+    salary,
+    custom_fields = []
   } = req.body;
+
   const contractTypeValue = contractType || contract_type;
   if (!contractTypeValue)
     return res.status(400).json({ error: 'Le type de contrat est requis' });
+
   try {
     const creatorId = req.user.id;
     const result = await pool.query(
       `INSERT INTO jobs
-         (title, description, contract_type, location, schedule, days, contact,
-          created_by, full_time, duration, start_date, end_date, salary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         (title, description, contract_type, location,
+          schedule, days, contact, created_by, full_time,
+          duration, start_date, end_date, salary, custom_fields)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
-        title, description, contractTypeValue, location,
-        schedule, days, contact, creatorId,
-        fullTime, duration, startDate, endDate, salary
+        title,
+        description,
+        contractTypeValue,
+        location,
+        schedule,
+        days,
+        contact,
+        creatorId,
+        fullTime,
+        duration,
+        startDate,
+        endDate,
+        salary,
+        custom_fields
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -158,20 +175,27 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-// Supprimer une annonce (proprio ou admin): DELETE /api/jobs/:id
+/**
+ * DELETE /api/jobs/:id
+ * Supprimer une annonce (proprio ou admin)
+ */
 router.delete('/:id', authenticate, async (req, res) => {
   const { id } = req.params;
   try {
     const fetchRes = await pool.query(
-      'SELECT created_by FROM jobs WHERE id = $1', [id]
+      'SELECT created_by FROM jobs WHERE id = $1',
+      [id]
     );
     if (fetchRes.rows.length === 0)
       return res.status(404).json({ error: 'Annonce non trouvée' });
+
     const owner = fetchRes.rows[0].created_by;
     if (req.user.id !== owner && req.user.role !== 'admin')
       return res.status(403).json({ message: 'Accès refusé' });
+
     const result = await pool.query(
-      'DELETE FROM jobs WHERE id = $1 RETURNING *', [id]
+      'DELETE FROM jobs WHERE id = $1 RETURNING *',
+      [id]
     );
     res.json({ success: true, deleted: result.rows[0] });
   } catch (err) {
