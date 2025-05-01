@@ -61,7 +61,10 @@ router.get('/', async (req, res) => {
 
     values.push(limit, offset);
     const dataRes = await pool.query(
-      `SELECT * FROM jobs ${whereClause} ORDER BY id DESC LIMIT $${idx} OFFSET $${idx + 1};`,
+      `SELECT * FROM jobs
+       ${whereClause}
+       ORDER BY id DESC
+       LIMIT $${idx} OFFSET $${idx + 1};`,
       values
     );
 
@@ -74,7 +77,7 @@ router.get('/', async (req, res) => {
 
 /**
  * GET /api/jobs/me
- * Annonces de l'utilisateur
+ * Annonces de l'utilisateur authentifié
  */
 router.get('/me', authenticate, async (req, res) => {
   try {
@@ -98,7 +101,8 @@ router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query('SELECT * FROM jobs WHERE id = $1', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Annonce non trouvée' });
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: 'Annonce non trouvée' });
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Erreur SQL GET job by ID :', err.stack);
@@ -109,7 +113,7 @@ router.get('/:id', async (req, res) => {
 /**
  * POST /api/jobs
  * Créer une annonce (auth requise)
- * Accepte champs personnalisés en JSONB
+ * Accepte des champs personnalisés en JSONB
  */
 router.post('/', authenticate, async (req, res) => {
   const {
@@ -134,14 +138,18 @@ router.post('/', authenticate, async (req, res) => {
 
   try {
     const creatorId = req.user.id;
+    // Assurer un JSON valide pour JSONB
+    const cfString = JSON.stringify(
+      Array.isArray(custom_fields) ? custom_fields : []
+    );
+
     const result = await pool.query(
       `INSERT INTO jobs
          (title, description, contract_type, location,
           schedule, days, contact, created_by,
           full_time, duration, start_date, end_date,
           salary, custom_fields)
-       VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         title,
@@ -157,7 +165,7 @@ router.post('/', authenticate, async (req, res) => {
         start_date,
         end_date,
         salary,
-        custom_fields
+        cfString
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -169,20 +177,26 @@ router.post('/', authenticate, async (req, res) => {
 
 /**
  * DELETE /api/jobs/:id
- * Supprimer une annonce
+ * Supprimer une annonce (propriétaire ou admin)
  */
 router.delete('/:id', authenticate, async (req, res) => {
   const { id } = req.params;
   try {
-    const fetchRes = await pool.query('SELECT created_by FROM jobs WHERE id = $1', [id]);
-    if (fetchRes.rows.length === 0) return res.status(404).json({ error: 'Annonce non trouvée' });
+    const fetchRes = await pool.query(
+      'SELECT created_by FROM jobs WHERE id = $1',
+      [id]
+    );
+    if (fetchRes.rows.length === 0)
+      return res.status(404).json({ error: 'Annonce non trouvée' });
 
     const owner = fetchRes.rows[0].created_by;
-    if (req.user.id !== owner && req.user.role !== 'admin') {
+    if (req.user.id !== owner && req.user.role !== 'admin')
       return res.status(403).json({ message: 'Accès refusé' });
-    }
 
-    const result = await pool.query('DELETE FROM jobs WHERE id = $1 RETURNING *', [id]);
+    const result = await pool.query(
+      'DELETE FROM jobs WHERE id = $1 RETURNING *',
+      [id]
+    );
     res.json({ success: true, deleted: result.rows[0] });
   } catch (err) {
     console.error('Erreur SQL DELETE job :', err.stack);
