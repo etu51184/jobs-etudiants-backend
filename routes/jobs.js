@@ -15,18 +15,14 @@ const authenticate = (req, res, next) => {
   const token = authHeader.split(' ')[1];
   jwt.verify(token, secret, (err, payload) => {
     if (err) return res.status(403).json({ message: 'Token invalide' });
-    req.user = payload; // { id, role, ... }
+    req.user = payload;
     next();
   });
 };
 
 /**
  * GET /api/jobs
- * - pagination via ?page=&limit=
- * - recherche sur le titre via ?search=
- * - filtre type via ?type=
- * - filtre lieu via ?location=
- * Retourne { jobs: [...], pages: N }
+ * Pagination, recherche par titre, filtre par type et lieu
  */
 router.get('/', async (req, res) => {
   try {
@@ -65,24 +61,20 @@ router.get('/', async (req, res) => {
 
     values.push(limit, offset);
     const dataRes = await pool.query(
-      `SELECT *
-       FROM jobs
-       ${whereClause}
-       ORDER BY id DESC
-       LIMIT $${idx} OFFSET $${idx + 1};`,
+      `SELECT * FROM jobs ${whereClause} ORDER BY id DESC LIMIT $${idx} OFFSET $${idx + 1};`,
       values
     );
 
     res.json({ jobs: dataRes.rows, pages: totalPages });
   } catch (err) {
-    console.error('Erreur SQL GET jobs :', err);
-    res.status(500).json({ error: 'Erreur lors du chargement des annonces' });
+    console.error('Erreur SQL GET jobs :', err.stack);
+    res.status(500).json({ error: err.message });
   }
 });
 
 /**
  * GET /api/jobs/me
- * Retourne les annonces créées par l'utilisateur authentifié
+ * Annonces de l'utilisateur
  */
 router.get('/me', authenticate, async (req, res) => {
   try {
@@ -93,114 +85,108 @@ router.get('/me', authenticate, async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error('Erreur SQL GET my jobs :', err);
-    res.status(500).json({ error: 'Erreur lors du chargement de vos annonces' });
+    console.error('Erreur SQL GET my jobs :', err.stack);
+    res.status(500).json({ error: err.message });
   }
 });
 
 /**
  * GET /api/jobs/:id
- * Retourne une annonce par ID
+ * Annonce par ID
  */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query('SELECT * FROM jobs WHERE id = $1', [id]);
-    if (result.rows.length === 0)
-      return res.status(404).json({ error: 'Annonce non trouvée' });
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Annonce non trouvée' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('Erreur SQL GET job by ID :', err);
-    res.status(500).json({ error: 'Erreur lors du chargement de l\'annonce' });
+    console.error('Erreur SQL GET job by ID :', err.stack);
+    res.status(500).json({ error: err.message });
   }
 });
 
 /**
  * POST /api/jobs
  * Créer une annonce (auth requise)
- * Accepte des champs personnalisés en JSONB
+ * Accepte champs personnalisés en JSONB
  */
 router.post('/', authenticate, async (req, res) => {
   const {
     title,
     description,
-    contractType,
     contract_type,
     location,
-    schedule,
-    days,
+    schedule = null,
+    days = null,
     contact,
-    fullTime,
-    duration,
-    startDate,
-    endDate,
-    salary,
+    full_time = null,
+    duration = null,
+    start_date = null,
+    end_date = null,
+    salary = null,
     custom_fields = []
   } = req.body;
 
-  const contractTypeValue = contractType || contract_type;
-  if (!contractTypeValue)
+  if (!contract_type) {
     return res.status(400).json({ error: 'Le type de contrat est requis' });
+  }
 
   try {
     const creatorId = req.user.id;
     const result = await pool.query(
       `INSERT INTO jobs
          (title, description, contract_type, location,
-          schedule, days, contact, created_by, full_time,
-          duration, start_date, end_date, salary, custom_fields)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          schedule, days, contact, created_by,
+          full_time, duration, start_date, end_date,
+          salary, custom_fields)
+       VALUES
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         title,
         description,
-        contractTypeValue,
+        contract_type,
         location,
         schedule,
         days,
         contact,
         creatorId,
-        fullTime,
+        full_time,
         duration,
-        startDate,
-        endDate,
+        start_date,
+        end_date,
         salary,
         custom_fields
       ]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Erreur SQL POST job :', err);
-    res.status(500).json({ error: 'Erreur lors de la création de l\'annonce' });
+    console.error('Erreur SQL POST job :', err.stack);
+    res.status(500).json({ error: err.message });
   }
 });
 
 /**
  * DELETE /api/jobs/:id
- * Supprimer une annonce (proprio ou admin)
+ * Supprimer une annonce
  */
 router.delete('/:id', authenticate, async (req, res) => {
   const { id } = req.params;
   try {
-    const fetchRes = await pool.query(
-      'SELECT created_by FROM jobs WHERE id = $1',
-      [id]
-    );
-    if (fetchRes.rows.length === 0)
-      return res.status(404).json({ error: 'Annonce non trouvée' });
+    const fetchRes = await pool.query('SELECT created_by FROM jobs WHERE id = $1', [id]);
+    if (fetchRes.rows.length === 0) return res.status(404).json({ error: 'Annonce non trouvée' });
 
     const owner = fetchRes.rows[0].created_by;
-    if (req.user.id !== owner && req.user.role !== 'admin')
+    if (req.user.id !== owner && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Accès refusé' });
+    }
 
-    const result = await pool.query(
-      'DELETE FROM jobs WHERE id = $1 RETURNING *',
-      [id]
-    );
+    const result = await pool.query('DELETE FROM jobs WHERE id = $1 RETURNING *', [id]);
     res.json({ success: true, deleted: result.rows[0] });
   } catch (err) {
-    console.error('Erreur SQL DELETE job :', err);
-    res.status(500).json({ error: 'Erreur lors de la suppression de l\'annonce' });
+    console.error('Erreur SQL DELETE job :', err.stack);
+    res.status(500).json({ error: err.message });
   }
 });
 
