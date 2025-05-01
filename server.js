@@ -4,6 +4,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import userRoutes from './routes/users.js';
 import jobRoutes from './routes/jobs.js';
+// server.js
+import favoritesRouter from './routes/favorites.js';
 
 dotenv.config();
 const app = express();
@@ -36,6 +38,7 @@ app.use(express.json());
 // Monte les routes utilisateurs et jobs
 app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
+app.use('/api/favorites', favoritesRouter);
 
 // 404 handler
 app.use((req, res) => {
